@@ -1,0 +1,1727 @@
+---
+title: "Forecast_Assignment_3_2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(dplyr)
+library(TSA)
+library(urca)
+library(tseries)
+library(forecast)
+library(dLagM)
+library(zoo)
+library(car)
+library(dynlm)
+library(Hmisc)
+library(xts)
+library(forecast)
+library(ggplot2)
+
+```
+# Task-1
+A group of researchers conducted a study to analyze the impact of climate and pollution on disease-specific mortality in Paris, France, from 2010 to 2020. They collected data on weekly mortality rates, temperature, pollutant particle size, and two chemical emissions (chem1 and chem2) at the same locations over this period. The objective is to develop accurate 4-week ahead forecasts for mortality using various statistical methods such as DLM, ARDL, polyck, koyck, dynamic, exponential smoothing, and state-space models.
+
+**Method Used**
+The process begins with data preprocessing of the 'mort.csv' file, involving the identification and handling of missing, unique, or unknown values. All series in the dataset are then transformed into time series, representing weekly values. An exploratory analysis phase follows, which includes creating time series plots for visual inspection and comparing the series. To assess stationarity, ACF plots and Dicker-Fuller Unit tests are employed. Correlations between series are examined through a correlation chart, and the data is decomposed using the STL method. Various distributed lag models are fitted, followed by the application of different dynamic linear models, exponential smoothing, and state-space models, possibly with data conversion to monthly frequency. The final selection of the best-performing models relies on metrics like R squared, AIC, BIC, MASE, and others. These chosen models will be used for forecasting mortality rates for the subsequent four weeks
+
+**Importing the dataset**
+```{r}
+
+setwd("D:/RMIT/In Class/Classes/Sem-2/Forcasting/Assignment 3")
+mort <- read.csv("mort.csv")
+```
+
+**Structure of data**
+```{r}
+head(mort)
+str(mort)
+```
+
+**Removing the first column**
+
+```{r}
+mort <- mort[, -1]
+str(mort)
+head(mort)
+```
+**Summary of dataset**
+
+```{r}
+summary(mort)
+```
+
+**Checking for the missing value**
+```{r}
+anyNA(mort)
+```
+
+
+**Time series conversion**
+```{r}
+mortality_ts <- ts(mort$mortality, start = c(2010,1), frequency = 52)
+
+temp_ts <- ts(mort$temp, start = c(2010,1), frequency = 52)
+
+chem1_ts <- ts(mort$chem1, start = c(2010,1), frequency = 52)
+
+chem2_ts <- ts(mort$chem2, start = c(2010,1), frequency = 52)
+
+particlesize_ts <- ts(mort$particle.size, start = c(2010,1), frequency = 52)
+```
+
+
+**Create a DataFrame from five series**
+
+```{r}
+mort_1 <- data.frame(
+  mortality_ts1 = mortality_ts,
+  temp_ts1 = temp_ts,
+  chem1_ts1 = chem1_ts,
+  chem2_ts1 = chem2_ts,
+  particlesize_ts1 = particlesize_ts
+)
+
+mort_ts <- ts(mort_1, start = c(2010,1), frequency = 52)
+
+class(mortality_ts)
+class(chem1_ts)
+class(chem2_ts)
+class(temp_ts)
+class(particlesize_ts)
+class(mort_ts)
+```
+**plotting the time series data **
+```{r}
+#mortality_ts
+plot(mortality_ts, ylab='Mortality (mor)', xlab='Time period',
+     main='Time Series Plot of Mortality',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(mortality_ts)), max(time(mortality_ts))), 
+     ylim=c(min(mortality_ts), max(mortality_ts)),panel.first=grid(), 
+     sub='figure_1',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+
+legend('topright', legend='Mortality', col='blue', lwd=2)
+
+#temp_ts
+plot(temp_ts, ylab='Temprature', xlab='Time period',
+     main='Time Series Plot of Temprature',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(temp_ts)), max(time(temp_ts))), 
+     ylim=c(min(temp_ts), max(temp_ts)),panel.first=grid(), 
+     sub='figure_2',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Temprature', col='blue', lwd=2)
+
+#chem1_ts
+plot(chem1_ts, ylab='chemical-1', xlab='Time period',
+     main='Time Series Plot of Chemical-1',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(chem1_ts)), max(time(chem1_ts))), 
+     ylim=c(min(chem1_ts), max(chem1_ts)),panel.first=grid(), 
+     sub='figure_3',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Chem-1', col='blue', lwd=2)
+
+#chem2_ts
+plot(chem2_ts, ylab='chemical-2', xlab='Time period',
+     main='Time Series Plot of Chemical-2',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(chem2_ts)), max(time(chem2_ts))), 
+     ylim=c(min(chem2_ts), max(chem2_ts)),panel.first=grid(), 
+     sub='figure_4',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Chem-2', col='blue', lwd=2)
+
+#particalsize_ts
+
+plot(particlesize_ts, ylab='particalsize', xlab='Time period',
+     main='Time Series Plot of Particle',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(particlesize_ts)), max(time(particlesize_ts))), 
+     ylim=c(min(particlesize_ts), max(particlesize_ts)),panel.first=grid(), 
+     sub='figure_5',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Particle_size', col='blue', lwd=2)
+
+```
+
+
+**Correlation and its interpretation**
+```{r}
+cor(mort)
+```
+
+
+**Checking stationarity of series**
+
+```{r}
+#Mortality
+
+par(mfrow=c(1,2))
+acf(mortality_ts, main = "Sample ACF for the mortality series",cex.main=0.65)
+pacf(mortality_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.mortality_ts = ur.df(mortality_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.mortality_ts)
+#p-value is less than 5% level of significance which indicates the mortality (mor) series is likely stationary.
+
+
+
+#Temperature
+
+par(mfrow=c(1,2))
+acf(temp_ts, main = "Sample ACF for the temperature series",cex.main=0.65)
+pacf(temp_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.temp_ts = ur.df(temp_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.temp_ts)
+#p-value is less than 5% level of significance which indicates the mortality (mor) series is likely stationary.
+
+
+
+#Chem-1
+
+par(mfrow=c(1,2))
+acf(chem1_ts, main = "Sample ACF for the asx series",cex.main=0.65)
+pacf(chem1_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.chem1_ts = ur.df(mortality_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.chem1_ts)
+#p-value is less than 5% level of significance which indicates the mortality (mor) series is likely stationary.
+
+
+
+
+#Chem-2
+
+par(mfrow=c(1,2))
+acf(chem2_ts, main = "Sample ACF for the asx series",cex.main=0.65)
+pacf(chem2_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.chem2_ts = ur.df(chem2_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.chem2_ts)
+#p-value is less than 5% level of significance which indicates the mortality (mor) series is likely stationary.
+
+
+
+#Particle Size
+
+par(mfrow=c(1,2))
+acf(particlesize_ts, main = "Sample ACF for the asx series",cex.main=0.65)
+pacf(particlesize_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.particlesize_ts = ur.df(particlesize_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.particlesize_ts)
+#p-value is less than 5% level of significance which indicates the mortality (mor) series is likely stationary.
+```
+
+**Decomposition of the series**
+
+```{r}
+#Mortality Series
+
+decomposed <- decompose(mortality_ts)
+plot(decomposed, col = "darkgreen")
+title(main = "Decomposition of Mortality Series")
+
+#Temp Series
+
+decomposed <- decompose(temp_ts)
+plot(decomposed, col = "green")
+title(main = "Decomposition of temp Series")
+
+#chem-1 Series
+
+decomposed <- decompose(chem1_ts)
+plot(decomposed, col = "green")
+title(main = "Decomposition of chem-1 Series")
+
+#chem-2 Series
+
+decomposed <- decompose(chem2_ts)
+plot(decomposed, col = "green")
+title(main = "Decomposition of chem-2 Series")
+
+#particlesize
+
+decomposed <- decompose(particlesize_ts)
+plot(decomposed, col = "green")
+title(main = "Decomposition of particle size Series")
+```
+
+
+**DLM Model Fitting**
+
+```{r}
+
+dlm 
+for ( i in 1 : 10){
+  model1.1 = dlm ( x = as.vector (temp_ts+chem1_ts+chem2_ts+particlesize_ts) , y = as.vector (mortality_ts), q = i)
+  cat ("q = " , i, "AIC = " , AIC (model1.1$model), "BIC = " , BIC (model1.1$model), "\n" )
+}
+
+# Temp vs Mort
+
+model1 = dlm ( x = as.vector (temp_ts) , y = as.vector (mortality_ts), q = 10)
+model1_summary =summary(model1)
+model1_summary$AIC
+model1_summary$BIC
+MASE(model1)
+
+# Chem1 vs Mort
+
+model1.2 = dlm ( x = as.vector (chem1_ts) , y = as.vector (mortality_ts), q = 10)
+model1.2_summary =summary(model1.2)
+model1.2_summary$AIC
+model1.2_summary$BIC
+MASE(model1.2)
+
+#Chem2 vs Mort
+
+model1.3 = dlm ( x = as.vector (chem2_ts) , y = as.vector (mortality_ts), q = 10)
+model1.3_summary =summary(model1.3)
+model1.3_summary$AIC
+model1.3_summary$BIC
+MASE(model1.3)
+
+#Part vs Mort
+
+model1.4 = dlm ( x = as.vector (particlesize_ts) , y = as.vector (mortality_ts), q = 10)
+model1.4_summary =summary(model1.4)
+model1.4_summary$AIC
+model1.4_summary$BIC
+MASE(model1.4)
+
+# All variable vs Mort
+
+model1.5 = dlm ( x = as.vector (temp_ts+chem1_ts+chem2_ts+particlesize_ts) , y = as.vector (mortality_ts), q = 10)
+model1.5_summary =summary(model1.5)
+model1.5_summary$AIC
+model1.5_summary$BIC
+MASE(model1.4)
+
+# all variables value 
+
+model1_summary$AIC
+model1.2_summary$AIC
+model1.3_summary$AIC
+model1.4_summary$AIC
+model1.5_summary$AIC
+
+
+model1_summary$BIC
+model1.2_summary$BIC
+model1.3_summary$BIC
+model1.4_summary$BIC
+model1.5_summary$BIC
+
+
+MASE(model1)
+MASE(model1.2) # best chem1  vs mort
+MASE(model1.3)
+MASE(model1.4)
+MASE(model1.5)
+
+model1.2_summary =summary(model1.2)
+checkresiduals (model1.2$model) 
+```
+
+The `model1.2` has the lowest AIC value of 3694.7, which is lower than the AIC values of the other models.So, based on the AIC values, `model1.2` is the best model among the options. A lower AIC value indicates a better fit to the data while penalizing the model complexity.We can also consider the MASE (Mean Absolute Scaled Error) values to evaluate the model's accuracy, where a lower MASE indicates better model performance. In this case, `model1.2` also has the lowest MASE of approximately 0.857, which further supports its status as the best model based on these metrics.
+
+
+**Polynomial DLM**
+
+```{r}
+#temp vs mortality
+poly.1 = polyDlm (x = as.vector (temp_ts) , y = as.vector (mortality_ts) , q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.1)
+
+#chem1 vs mortality
+poly.2 = polyDlm (x = as.vector (chem1_ts) , y = as.vector (mortality_ts) , q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.2)
+
+#chem2 vs mortality
+poly.3 = polyDlm (x = as.vector (chem2_ts) , y = as.vector (mortality_ts) , q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.3)
+
+#particle vs mortality
+poly.4 = polyDlm (x = as.vector (particlesize_ts) , y = as.vector (mortality_ts) , q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.4)
+
+#all variable vs mortality
+poly.5 = polyDlm (x = as.vector (temp_ts+chem1_ts+chem2_ts+particlesize_ts) , y = as.vector (mortality_ts), q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.5)
+
+
+AIC(poly.1) 
+AIC(poly.2) 
+AIC(poly.3) 
+AIC(poly.4) 
+AIC(poly.5) 
+
+BIC(poly.1) 
+BIC(poly.2) 
+BIC(poly.3) 
+BIC(poly.4) 
+BIC(poly.5) 
+
+MASE(poly.1)
+MASE(poly.2) #selected chem1 vs mort
+MASE(poly.3) 
+MASE(poly.4) 
+MASE(poly.5) 
+
+#model poly 2 is selected
+checkresiduals(poly.2$model)
+```
+
+**Koyck model** 
+
+```{r}
+#temp vs mortality
+koyck.1 = koyckDlm (x = as.vector (temp_ts) , y = as.vector (mortality_ts))
+summary (koyck.1)
+
+#chem1 vs mortality
+koyck.2 = koyckDlm (x = as.vector (chem1_ts) , y = as.vector (mortality_ts) )
+summary (koyck.2)
+
+#chem2 vs mortality
+koyck.3 = koyckDlm (x = as.vector (chem2_ts) , y = as.vector (mortality_ts) )
+summary (koyck.3)
+
+#particle vs mortality
+koyck.4 = koyckDlm (x = as.vector (particlesize_ts) , y = as.vector (mortality_ts))
+summary (koyck.4)
+
+#all variable vs mortality
+koyck.5 = koyckDlm (x = as.vector (temp_ts+chem1_ts+chem2_ts+particlesize_ts) , y = as.vector (mortality_ts))
+summary (koyck.5)
+
+
+AIC(koyck.1) 
+AIC(koyck.2) 
+AIC(koyck.3) 
+AIC(koyck.4) 
+AIC(koyck.5) 
+
+BIC(koyck.1) 
+BIC(koyck.2) 
+BIC(koyck.3) 
+BIC(koyck.4) 
+BIC(koyck.5) 
+
+MASE(koyck.1)
+MASE(koyck.2) 
+MASE(koyck.3) 
+MASE(koyck.4) 
+MASE(koyck.5) 
+```
+
+**Model fitting ardlm** 
+
+```{r}
+
+#temp vs mortality
+ardlm.1 = ardlDlm(x = as.vector (temp_ts) , y = as.vector (mortality_ts) , p = 10 , q = 10)
+summary(ardlm.1)
+
+#chem1 vs mortality
+ardlm.2 = ardlDlm (x = as.vector (chem1_ts) , y = as.vector (mortality_ts) , p = 10 , q = 10)
+summary (ardlm.2)
+
+#chem2 vs mortality
+ardlm.3 = ardlDlm (x = as.vector (chem2_ts) , y = as.vector (mortality_ts) , p = 10 , q = 10)
+summary (ardlm.3)
+
+#particle vs mortality
+ardlm.4 = ardlDlm (x = as.vector (particlesize_ts) , y = as.vector (mortality_ts) , p = 10 , q = 10)
+summary (ardlm.4)
+
+
+
+
+AIC(ardlm.1) 
+AIC(ardlm.2) 
+AIC(ardlm.3) 
+AIC(ardlm.4) 
+
+
+BIC(ardlm.1) 
+BIC(ardlm.2) 
+BIC(ardlm.3) 
+BIC(ardlm.4) 
+
+
+MASE(ardlm.1) # selected temp vs mort 
+MASE(ardlm.2) 
+MASE(ardlm.3) 
+MASE(ardlm.4) 
+```
+
+**DYNLM**
+
+```{r}
+Y.t= mortality_ts
+
+dynlm.1 = dynlm(Y.t ~ temp_ts+L(Y.t , k = 1 ) +  trend(Y.t) + season(Y.t))
+dynlm.2 = dynlm(Y.t ~ chem1_ts+L(Y.t , k = 1 ) +  trend(Y.t) + season(Y.t))
+dynlm.3 = dynlm(Y.t ~ chem2_ts+L(Y.t , k = 1 ) +  trend(Y.t) + season(Y.t))
+dynlm.4 = dynlm(Y.t ~ particlesize_ts+L(Y.t , k = 1 ) +  trend(Y.t) + season(Y.t))
+dynlm.5 = dynlm(Y.t ~ temp_ts+L(Y.t , k = 2 ) +  trend(Y.t) + season(Y.t))
+dynlm.6 = dynlm(Y.t ~ chem1_ts+L(Y.t , k = 2 ) +  trend(Y.t) + season(Y.t))
+dynlm.7 = dynlm(Y.t ~ chem2_ts+L(Y.t , k = 2 ) +  trend(Y.t) + season(Y.t))
+dynlm.8 = dynlm(Y.t ~ particlesize_ts+L(Y.t , k = 2 ) +  trend(Y.t) + season(Y.t))
+
+
+AIC(dynlm.1)
+AIC(dynlm.2)
+AIC(dynlm.3)
+AIC(dynlm.4)
+AIC(dynlm.5)
+AIC(dynlm.6)
+AIC(dynlm.7)
+AIC(dynlm.8) # selected particle size with lag 2
+
+BIC(dynlm.1)
+BIC(dynlm.2)
+BIC(dynlm.3)
+BIC(dynlm.4)
+BIC(dynlm.5)
+BIC(dynlm.6)
+BIC(dynlm.7)
+BIC(dynlm.8)
+
+summary(dynlm.8)
+checkresiduals(dynlm.8)
+```
+
+
+**Exponential soothing**
+
+```{r}
+mortality_zoo <- zoo(mort$mortality, order.by = seq.Date(from = as.Date("2010-01-01"), by = "1 week", length.out = length(mort$mortality)))
+# Convert to monthly data (calculate monthly means)
+mortality_monthly <- aggregate(mortality_zoo, as.yearmon, mean)
+# Create a data frame with months and values
+monthly_data <- data.frame(
+  Month = as.yearmon(time(mortality_monthly)),
+  Value = coredata(mortality_monthly)
+)
+# Print the data frame
+print(monthly_data)
+colnames(monthly_data)
+
+monthly_data_ts <- ts(monthly_data$Value,start=c(2010,1),frequency = 12)
+
+expo.1<-hw(monthly_data_ts,seasonal="additive")
+expo.2<-hw(monthly_data_ts,seasonal="additive",damped=TRUE)
+expo.3<-hw(monthly_data_ts,seasonal="multiplicative")
+expo.4<-hw(monthly_data_ts,seasonal="multiplicative",exponential = TRUE)
+expo.5<-hw(monthly_data_ts,seasonal="multiplicative",damped=TRUE)
+expo.6<-hw(monthly_data_ts,seasonal="multiplicative",exponential = TRUE,damped=TRUE)
+
+
+expo.1$model$bic
+expo.2$model$bic
+expo.3$model$bic
+expo.4$model$bic
+expo.5$model$bic
+expo.6$model$bic
+
+expo.1$model$aic
+expo.2$model$aic
+expo.3$model$aic
+expo.4$model$aic
+expo.5$model$aic
+expo.6$model$aic #selected
+
+summary(expo.6)
+checkresiduals(expo.6)
+```
+
+**ETS** 
+```{r}
+ets.1=ets(monthly_data_ts,model="MNN") 
+summary(ets.1)
+checkresiduals(ets.1) 
+
+ets.2=ets(monthly_data_ts,model="ANN") 
+summary(ets.2)
+checkresiduals(ets.2) 
+
+ets.3=ets(monthly_data_ts,model="AAN") 
+summary(ets.3)
+checkresiduals(ets.3) 
+
+ets.4=ets(monthly_data_ts,model="MAN",damped=TRUE) 
+summary(ets.4)
+checkresiduals(ets.4)
+
+ets.5=ets(monthly_data_ts,model="AAA",damped = TRUE) 
+summary(ets.5)
+checkresiduals(ets.5) 
+
+ets.6=ets(monthly_data_ts,model="MAA") 
+summary(ets.6)
+checkresiduals(ets.6) 
+
+ets.7=ets(monthly_data_ts,model="MAM") 
+summary(ets.7)
+checkresiduals(ets.7) 
+
+ets.8=ets(monthly_data_ts) 
+summary(ets.8)
+checkresiduals(ets.8) #AUTO
+
+ets.9=ets(monthly_data_ts,model="MNA") 
+summary(ets.9)
+checkresiduals(ets.9) #selected 
+
+```
+
+**Selected models**
+
+```{r}
+model1.2 = dlm ( x = as.vector (chem1_ts) , y = as.vector (mortality_ts), q = 10)
+model1.2_summary =summary(model1.2)
+
+model1.2_summary$BIC
+MASE(model1.2)
+checkresiduals(model1.2)
+
+#chem1 vs mortality
+poly.2 = polyDlm (x = as.vector (chem1_ts) , y = as.vector (mortality_ts) , q = 10 , k = 2 , show.beta= TRUE)
+summary (poly.2)
+
+BIC(poly.2)
+MASE(poly.2) 
+checkresiduals(poly.2$model)
+
+#chem1 vs mortality
+koyck.2 = koyckDlm (x = as.vector (chem1_ts) , y = as.vector (mortality_ts) )
+summary (koyck.2)
+
+#temp vs mortality
+ardlm.1 = ardlDlm(x = as.vector (temp_ts) , y = as.vector (mortality_ts) , p = 10 , q = 10)
+summary(ardlm.1)
+
+Y.t= mortality_ts
+dynlm.8 = dynlm(Y.t ~ particlesize_ts+L(Y.t , k = 2 ) +  trend(Y.t) + season(Y.t))
+AIC(dynlm.8)
+BIC(dynlm.8)
+summary(dynlm.8)
+checkresiduals(dynlm.8)
+
+expo.6<-hw(monthly_data_ts,seasonal="multiplicative",exponential = TRUE,damped=TRUE)
+expo.6$model$bic
+expo.6$model$aic
+summary(expo.6)
+checkresiduals(expo.6)
+
+ets.9=ets(monthly_data_ts,model="MNA") 
+summary(ets.9)
+checkresiduals(ets.9)
+
+
+model1.2_summary$AIC
+AIC(poly.2)
+AIC(koyck.2) 
+AIC(ardlm.1)
+AIC(dynlm.8)
+expo.6$model$aic
+```
+
+**Forecasting**
+
+```{r}
+expo.6<-hw(monthly_data_ts,seasonal="multiplicative",exponential = TRUE,damped=TRUE,h=2*frequency(monthly_data_ts))
+expo6.forecast =expo.6$mean
+forecast = ts.intersect(
+  ts((c(monthly_data_ts, expo6.forecast)),start=c(2010,1),frequency = 12)
+  
+)
+autoplot(forecast) +
+  xlab("Time") + ylab("Value") +
+  ggtitle("Expo.6 Model Forecast")
+
+par(mfrow=c(1,1))
+plot(mortality_ts,ylab='mor',xlab='Year',main = "Mortality forecast using dynlm")
+lines(dynlm.8$fitted.values,col="blue")
+
+```
+
+
+
+# Task-2
+
+In a comprehensive study, Hudson & Keatley (2021) investigated the influence of climate factors, including rainfall (rain), temperature (temp), radiation level (rad), and relative humidity (RH), on the first flowering day (FFD) of 81 Australian plant species. The study aimed to understand how long-term climate patterns affected FFD for the years 1984 to 2014. Your dataset focuses on one specific plant species among the 81, encompassing a 31-year time span (1984-2014). It includes five time series: the FFD series for the selected plant species and yearly averaged climate variables. Your task involves modeling and forecasting the FFD, testing univariate models with individual climate predictors. The objective is to provide the most accurate FFD forecasts four years in advance, complete with point estimates, confidence intervals, and relevant graphical representations.
+
+**Method Used**
+
+Task 2's primary objective is to analyze and forecast the First Flowering Day (FFD) four years ahead. It involves data preprocessing, covariate integration, and exploratory analysis of the FFD time series and related climate variables. The correlation between these series is assessed, and various models, including dynamic linear models, exponential smoothing, and state-space models, are fitted based on the data analysis. Forecasts are generated for the best-performing models using accuracy measures like R2, F-test, AIC, and BIC. The ultimate goal is to select the most accurate model to provide reliable FFD forecasts for the next four years, ensuring sound decision-making in relation to plant species.
+
+**Importing the dataset**
+
+```{r}
+setwd("D:/RMIT/In Class/Classes/Sem-2/Forcasting/Assignment 3")
+ffd <- read.csv("FFD.csv")
+cov <- read.csv("Covariate.csv")
+```
+
+**Structure of data**
+```{r}
+head(ffd)
+str(ffd)
+head(cov)
+str(cov)
+```
+
+
+
+**Summary of dataset**
+```{r}
+summary(ffd)
+```
+
+**Checking for the missing value**
+
+```{r}
+anyNA(ffd)
+anyNA(cov)
+colSums(is.na(cov))
+
+cov <- na.omit(cov)
+```
+
+**Time series conversion**
+
+```{r}
+temp2_ts <- ts(ffd$Temperature, start = c(1984,1), frequency = 1)
+rain2_ts <- ts(ffd$Rainfall, start = c(1984,1), frequency = 1)
+radiation2_ts <- ts(ffd$Radiation, start = c(1984,1), frequency = 1)
+humidity2_ts <- ts(ffd$RelHumidity, start = c(1984,1), frequency = 1)
+ffd2_ts<- ts(ffd$FFD, start = c(1984,1), frequency = 1)
+ffdf2_ts <-  ts(ffd, start = c(1984,1), frequency = 1)
+```
+
+
+**Plotting the time series data**
+
+```{r}
+plot(temp2_ts, ylab='Temp', xlab='Time period',
+     main='Time Series Plot of Temp',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(temp2_ts)), max(time(temp2_ts))), 
+     ylim=c(min(temp2_ts), max(temp2_ts)),panel.first=grid(), 
+     sub='figure_6',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Temp', col='blue', lwd=2)
+
+
+
+plot(rain2_ts, ylab='Rain', xlab='Time period',
+     main='Time Series Plot of Rain',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(rain2_ts)), max(time(rain2_ts))), 
+     ylim=c(min(rain2_ts), max(rain2_ts)),panel.first=grid(), 
+     sub='figure_7',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Rain', col='blue', lwd=2)
+
+
+
+plot(radiation2_ts, ylab='Radiation', xlab='Time period',
+     main='Time Series Plot of Radiation',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(radiation2_ts)), max(time(radiation2_ts))), 
+     ylim=c(min(radiation2_ts), max(radiation2_ts)),panel.first=grid(), 
+     sub='figure_8',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Radiation', col='blue', lwd=2)
+
+
+plot(humidity2_ts, ylab='Humidty', xlab='Time period',
+     main='Time Series Plot of Humidty',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(humidity2_ts)), max(time(humidity2_ts))), 
+     ylim=c(min(humidity2_ts), max(humidity2_ts)),panel.first=grid(), 
+     sub='figure_9',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Humidty', col='blue', lwd=2)
+
+par(mfrow=c(1,1))
+ffd_scaled  = scale(ffd2_ts)
+plot(ffd_scaled, plot.type = "s", col = c("blue", "red","green","pink","black"), main = "Time Series plot of Scaled ffd",xlab="Time period")
+legend('topright', legend=c("Temperature","Rainfall","Radiation","Humidty","FFD"), col=c("blue", "red","green","pink","black"), lwd=2)
+
+```
+
+**Correlation**
+
+```{r}
+cor(ffd)
+```
+
+**Checking stationarity of series**
+
+```{r}
+#temprature
+
+par(mfrow=c(1,2))
+acf(temp2_ts, main = "Sample ACF for the temprature series",cex.main=0.65)
+pacf(temp2_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.temp2_ts = ur.df(temp2_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.temp2_ts)
+adf.test(temp2_ts)
+
+#making the series stationary by differencing
+
+tempdiff = diff(temp2_ts)
+adf.test(tempdiff)
+tempdiff2 = diff(tempdiff)
+adf.test(tempdiff2)
+tempdiff3 = diff(tempdiff2)
+adf.test(tempdiff3)
+
+#now the sereis has become stationary
+
+
+
+
+#rainfall
+
+par(mfrow=c(1,2))
+acf(rain2_ts, main = "Sample ACF for the rain series",cex.main=0.65)
+pacf(rain2_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.rain2_ts = ur.df(rain2_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.rain2_ts)
+adf.test(rain2_ts)
+
+#making the series stationary
+raindiff = diff(rain2_ts)
+adf.test(raindiff)
+
+
+#Radiation
+
+par(mfrow=c(1,2))
+acf(radiation2_ts, main = "Sample ACF for the radiation series",cex.main=0.65)
+pacf(radiation2_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.radiation2_ts = ur.df(radiation2_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.radiation2_ts)
+adf.test(radiation2_ts)
+
+#making the series stationary
+radiationdiff = diff(radiation2_ts)
+adf.test(radiationdiff)
+radiationdiff2 = diff(radiationdiff)
+adf.test(radiationdiff2)
+radiationdiff3 = diff(radiationdiff2)
+adf.test(radiationdiff3) #series has become stationary
+
+
+
+#humidty 
+
+par(mfrow=c(1,2))
+acf(humidity2_ts, main = "Sample ACF for the humidity series",cex.main=0.65)
+pacf(humidity2_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.humidity2_ts = ur.df(humidity2_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.humidity2_ts)
+adf.test(humidity2_ts)
+
+#making the series stationary
+humidtydiff = diff(humidity2_ts)
+adf.test(humidtydiff)
+humidtydiff2 = diff(humidtydiff)
+adf.test(humidtydiff2)
+humidtydiff3 = diff(humidtydiff2)
+adf.test(humidtydiff3)
+```
+
+
+**Model Fitting DLM**
+
+```{r}
+
+for ( i in 1 : 10){
+  model1.1 = dlm ( x = as.vector (temp2_ts) , y = as.vector (ffd2_ts), q = i)
+  cat ("q = " , i, "AIC = " , AIC (model1.1$model), "BIC = " , BIC (model1.1$model), "\n" )
+}
+
+# Temp vs FFD
+
+dlm.1 = dlm ( x = as.vector (temp2_ts) , y = as.vector (ffd2_ts), q = 10)
+dlm.11 =summary(dlm.1)
+dlm.11$AIC
+dlm.11$BIC
+MASE(dlm.1)
+
+# Rainfall vs FFD
+
+dlm.2 = dlm ( x = as.vector (rain2_ts) , y = as.vector (ffd2_ts), q = 10)
+dlm.21 =summary(dlm.2)
+dlm.21$AIC
+dlm.21$BIC
+MASE(dlm.2)
+
+# Radiation vs FFD
+
+dlm.3 = dlm ( x = as.vector (radiation2_ts) , y = as.vector (ffd2_ts), q = 10)
+dlm.31 =summary(dlm.3)
+dlm.31$AIC
+dlm.31$BIC
+MASE(dlm.3)
+
+# Humidity vs FFD
+
+dlm.4 = dlm ( x = as.vector (humidity2_ts) , y = as.vector (ffd2_ts), q = 10)
+dlm.41 =summary(dlm.4)
+dlm.41$AIC
+dlm.41$BIC
+MASE(dlm.4)
+
+## without intercept
+
+temp.nointercept = dlm(formula = FFD ~  Temperature- 1, data=data.frame(ffdf2_ts), q=10)
+rain.nointercept = dlm(formula = FFD ~  Rainfall- 1, data=data.frame(ffdf2_ts), q=10)
+radiation.nointercept = dlm(formula = FFD ~  Radiation- 1, data=data.frame(ffdf2_ts), q=10)
+Humidity.nointercept = dlm(formula = FFD ~  RelHumidity- 1, data=data.frame(ffdf2_ts), q=10)
+
+dlm.11$AIC
+dlm.21$AIC
+dlm.31$AIC #Radiation Selected
+dlm.41$AIC
+AIC(temp.nointercept)
+AIC(rain.nointercept)
+AIC(radiation.nointercept)
+AIC(Humidity.nointercept)
+
+dlm.11$BIC
+dlm.21$BIC
+dlm.31$BIC #Radiation Selected
+dlm.41$BIC
+BIC(temp.nointercept)
+BIC(rain.nointercept)
+BIC(radiation.nointercept)
+BIC(Humidity.nointercept)
+
+
+MASE(dlm.1)
+MASE(dlm.2)
+MASE(dlm.3) #Radiation Selected
+MASE(dlm.4)
+MASE(temp.nointercept)
+MASE(rain.nointercept)
+MASE(radiation.nointercept)
+MASE(Humidity.nointercept)
+
+#Selected dlm model
+dlm.4 = dlm ( x = as.vector (radiation2_ts) , y = as.vector (ffd2_ts), q = 10)
+summary(dlm.4)
+checkresiduals(dlm.3$model,test=FALSE)
+
+# Forecasting 
+
+# so we will be using radiation variable to forecast ffd
+rad <-cov$Radiation
+rad
+
+
+
+
+# Generating point forecasts
+
+forecastFFDfinite <- dLagM::forecast(dlm.3,x = c(14.6,
+                                                 14.56,
+                                                 14.79,
+                                                 14.79
+                                                 
+) ,h = 4)
+
+forecastFFDfinite <- round(forecastFFDfinite$forecasts,2)
+par(mfrow=c(1,1))
+plot(ts(c(as.vector(ffd2_ts),forecastFFDfinite),start=1984),type="o",col="blue",ylim=c(0,500), ylab="FFD_forecasted",
+     main="Figure 39: FFD four year ahead predicted values from 2015-2018",)
+lines(ts(as.vector(ffd2_ts),start=1984),col="black",type="o")
+legend("bottomleft", lty = 1,pch=1,text.width=11, col = c("blue","black"), c("Finite DLM","Data (FFD)"))
+```
+
+**Poly DLM**
+```{r}
+finiteDLMauto(x = as.vector(temp2_ts), y = as.vector(ffd2_ts), q.min = 1, q.max = 10, k.order = 2,
+              model.type = "poly", error.type ="AIC", trace = TRUE)
+
+temp_poly = polyDlm(x = as.vector(temp2_ts), y = as.vector(ffd2_ts), q = 10, k = 2,show.beta=TRUE)
+rain_poly = polyDlm(x = as.vector(rain2_ts), y = as.vector(ffd2_ts), q = 10, k = 2,show.beta=TRUE)
+humid_poly = polyDlm(x = as.vector(humidity2_ts), y = as.vector(ffd2_ts), q = 10, k = 2,show.beta=TRUE)
+radiation_poly = polyDlm(x = as.vector(radiation2_ts), y = as.vector(ffd2_ts), q = 10, k = 2,show.beta=TRUE)
+
+AIC(temp_poly)
+AIC(rain_poly)
+AIC(humid_poly)
+AIC(radiation_poly)
+
+BIC(temp_poly)
+BIC(rain_poly)
+BIC(humid_poly) #selected
+BIC(radiation_poly)
+
+MASE(temp_poly)
+MASE(rain_poly)
+MASE(humid_poly)
+MASE(radiation_poly)
+
+summary (humid_poly)
+checkresiduals (humid_poly)
+
+
+poly_frc <- dLagM::forecast(humid_poly,x = c(52.16,52.87,52.58,52.5) ,h = 4)
+poly_frc.1 <- round(poly_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(ffd2_ts),poly_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(ffd2_ts),poly_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2018)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(poly_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual FFD", "Forecasted FFD"))
+```
+
+**Model Fitting Koyck**
+
+```{r}
+
+temp_koyck = koyckDlm(x = as.vector(temp2_ts), y = as.vector(ffd2_ts))
+rain_koyck = koyckDlm(x = as.vector(rain2_ts), y = as.vector(ffd2_ts))
+humid_koyck = koyckDlm(x = as.vector(humidity2_ts), y = as.vector(ffd2_ts))
+radiation_koyck = koyckDlm(x = as.vector(radiation2_ts), y = as.vector(ffd2_ts))
+
+AIC(temp_koyck) #selected
+AIC(rain_koyck)
+AIC(humid_koyck)
+AIC(radiation_koyck)
+
+BIC(temp_koyck)
+BIC(rain_koyck)
+BIC(humid_koyck)
+BIC(radiation_koyck)
+
+MASE(temp_koyck)
+MASE(rain_koyck)
+MASE(humid_koyck)
+MASE(radiation_koyck)
+
+summary (temp_koyck)
+checkresiduals (temp_koyck$model)
+
+#forecasting using koyck
+
+koyck_frc <- dLagM::forecast(temp_koyck,x = c(20.74,20.49,20.52,20.56
+) ,h = 4)
+koyck_frc.1 <- round(koyck_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(ffd2_ts),koyck_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(ffd2_ts),koyck_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2018)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(koyck_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual FFD", "Forecasted FFD"))
+```
+
+**ARDLM**
+
+```{r}
+
+for (i in 1:5){
+  for (j in 1: 5){
+    ard_model = ardlDlm (x=as.vector(temp2_ts) , y=as.vector(ffd2_ts), p=i , q=j )
+    cat ( "p=" ,i, "q = ", j, "AIC =", AIC(ard_model$model), "BIC=", BIC(ard_model$model), "\n" )
+  }
+}
+
+temp_ardl = ardlDlm(x=as.vector(temp2_ts), y=as.vector(ffd2_ts), p = 5, q = 1)
+rain_ardl = ardlDlm(x=as.vector(rain2_ts), y=as.vector(ffd2_ts), p = 5, q = 1)
+humid_ardl = ardlDlm(x=as.vector(humidity2_ts), y=as.vector(ffd2_ts), p = 5, q = 1)
+radiation_ardl = ardlDlm(x=as.vector(radiation2_ts), y=as.vector(ffd2_ts), p = 5, q = 1)
+
+AIC(temp_ardl) 
+AIC(rain_ardl)#selected
+AIC(humid_ardl)
+AIC(radiation_ardl)
+
+BIC(temp_ardl)
+BIC(rain_ardl)
+BIC(humid_ardl)
+BIC(radiation_ardl)
+
+MASE(temp_ardl)
+MASE(rain_ardl)
+MASE(humid_ardl)
+MASE(radiation_ardl)
+
+summary (rain_ardl)
+checkresiduals (rain_ardl)
+
+
+#forecasting using ardlm
+
+ardl_frc <- dLagM::forecast(rain_ardl,x = c(2.27,
+                                            2.38,
+                                            2.26,
+                                            2.27
+                                            
+                                            
+) ,h = 4)
+ardl_frc.1 <- round(ardl_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(ffd2_ts),ardl_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(ffd2_ts),ardl_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2018)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(ardl_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual FFD", "Forecasted FFD"))
+```
+
+**DYNLM**
+
+```{r}
+dynlm.1 <- dynlm(ffd2_ts ~ L(ffd2_ts , k = 1 )+ trend(ffd2_ts))
+dynlm.2 <- dynlm(ffd2_ts ~ L(ffd2_ts , k = 2 )+ trend(ffd2_ts))
+dynlm.3 <-dynlm(ffd2_ts~ L(ffd2_ts , k = 1 )+ L(ffd2_ts , k = 2 ))
+dynlm.4 <-dynlm(ffd2_ts ~ temp2_ts + L(ffd2_ts, k=1))
+dynlm.5 <-dynlm(ffd2_ts ~ temp2_ts + L(ffd2_ts, k=2))
+dynlm.6 <-dynlm(ffd2_ts ~ rain2_ts + L(ffd2_ts, k=1))
+dynlm.7 <-dynlm(ffd2_ts ~ rain2_ts + L(ffd2_ts, k=2))
+dynlm.8 <-dynlm(ffd2_ts ~ radiation2_ts + L(ffd2_ts, k=1))
+dynlm.9 <-dynlm(ffd2_ts ~ radiation2_ts + L(ffd2_ts, k=2))
+dynlm.10 <-dynlm(ffd2_ts ~ humidity2_ts + L(ffd2_ts, k=1))
+dynlm.11 <-dynlm(ffd2_ts ~ humidity2_ts + L(ffd2_ts, k=2))
+
+
+
+
+AIC(dynlm.1)
+AIC(dynlm.2)
+AIC(dynlm.3)
+AIC(dynlm.4)
+AIC(dynlm.5)
+AIC(dynlm.6)
+AIC(dynlm.7)
+AIC(dynlm.8) # selected particle size with lag 2
+AIC(dynlm.9)
+AIC(dynlm.10)
+AIC(dynlm.11)
+
+BIC(dynlm.1)
+BIC(dynlm.2)
+BIC(dynlm.3)
+BIC(dynlm.4)
+BIC(dynlm.5)
+BIC(dynlm.6)
+BIC(dynlm.7)
+BIC(dynlm.8)
+BIC(dynlm.9)
+BIC(dynlm.10)
+BIC(dynlm.11)
+
+summary(dynlm.3)
+checkresiduals(dynlm.3)
+```
+
+# Task-3
+
+Climate change is a pressing concern in Australia, where extreme climatic conditions make the region susceptible to shifts in weather patterns and an increasing frequency of extreme events. Recent research has illuminated the impact of climate change on the timing and order of flowering in plants. Changes in the order of flowering can have adverse effects on plant growth and the availability of food resources. However, there has been limited investigation into how these flowering orders have evolved over time. The dataset from Hudson & Keatley (2021) delves into this issue by examining how long-term climate shifts in Victoria have influenced the relative flowering order similarity of 81 plant species from 1984 to 2014. To measure these changes, the Rank-based Order similarity metric (RBO) is used, which quantifies the similarity between the annual flowering order of plants and their order in 1983. A decrease in RBO indicates that flowering orders have become more dissimilar from their original 1983 order. The analysis seeks to unveil the relationship between flowering order (RBO) and climate conditions, particularly in terms of yearly averaged temperature, rainfall, radiation, and relative humidity. These insights may be leveraged for forecasting future flowering orders, aiding in our understanding of how climate change affects plant behavior and ecosystems.
+
+**Method**
+
+Task 3's primary goal is to analyze and forecast the Rank-based Order similarity metric (RBO) for three years ahead. The process is divided into two parts: Part (a) involves the standard analysis and prediction, while Part (b) integrates dynamic models to account for the impact of the Australian drought period. The steps include data preprocessing, ensuring data quality in the 'RBO.csv' file, converting the series into time-series for annual representation, and utilizing covariates in forecasting. Exploratory analysis and stationarity checks are conducted, and correlations between series are examined. Various distributed lag models and dynamic linear models (dynlm) are fitted. The best model is selected based on metrics like R-squared, AIC, BIC, and MASE. In Part (b), dynamic linear models are employed to incorporate the effects of the drought period on RBO. Forecasting is then conducted for the subsequent three years. Task 3 aims to provide valuable insights and predictions regarding how climate changes influence the flowering order of plant species.
+
+**Importing the dataset**
+
+```{r}
+setwd("D:/RMIT/In Class/Classes/Sem-2/Forcasting/Assignment 3")
+rbo <- read.csv("RBO.csv")
+covx <- read.csv("Covariate x-values for Task 3.csv")
+```
+
+
+**Structure of data**
+
+```{r}
+head(rbo)
+str(rbo)
+```
+
+**Summary of dataset**
+
+```{r}
+summary(rbo)
+```
+
+**Checking for the missing value**
+```{r}
+anyNA(rbo)
+colSums(is.na(rbo))
+```
+**Coverting to time series**
+```{r}
+rbo_dataframe <- ts(rbo[,2:6], start = c(1984,1), frequency = 1)
+rbo_ts <- ts(rbo$RBO,start = c(1984,1), frequency = 1)
+temp1_ts <- ts(rbo$Temperature ,start = c(1984,1), frequency = 1)
+rain1_ts <- ts(rbo$Rainfall,start=c(1984,1),frequency=1)
+radi1_ts <- ts(rbo$Radiation,start=c(1984,1),frequency=1)
+humi1_ts <- ts(rbo$RelHumidity,start=c(1984,1),frequency=1)
+```
+**Plotting the time series data**
+
+```{r}
+plot(rbo_ts, ylab='Variables', xlab='Time period',
+     main='Time Series Plot of dataframe',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(rbo_ts)), max(time(rbo_ts))), 
+     ylim=c(min(rbo_ts), max(rbo_ts)),panel.first=grid(), 
+     sub='figure_10',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Time Series Plot of Dataframe', col='blue', lwd=2)
+
+plot(temp1_ts, ylab='Variables', xlab='Time period',
+     main='Time Series Plot of temprature',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(temp1_ts)), max(time(temp1_ts))), 
+     ylim=c(min(temp1_ts), max(temp1_ts)),panel.first=grid(), 
+     sub='figure_11',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Time Series Plot of temp', col='blue', lwd=2)
+
+plot(rain1_ts, ylab='Variables', xlab='Time period',
+     main='Time Series Plot rain',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(rain1_ts)), max(time(rain1_ts))), 
+     ylim=c(min(rain1_ts), max(rain1_ts)),panel.first=grid(), 
+     sub='figure_12',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Time Series Plot of rain', col='blue', lwd=2)
+
+plot(radi1_ts, ylab='Variables', xlab='Time period',
+     main='Time Series Plot of radiation',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(radi1_ts)), max(time(radi1_ts))), 
+     ylim=c(min(radi1_ts), max(radi1_ts)),panel.first=grid(), 
+     sub='figure_13',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Time Series Plot of radi', col='blue', lwd=2)
+
+plot(humi1_ts, ylab='Variables', xlab='Time period',
+     main='Time Series Plot of humidity',type='l', col='blue', 
+     lwd=2, xlim=c(min(time(humi1_ts)), max(time(humi1_ts))), 
+     ylim=c(min(humi1_ts), max(humi1_ts)),panel.first=grid(), 
+     sub='figure_14',cex.main=1.2, cex.sub=0.8,col.main='red',
+     col.sub='darkgreen'
+)
+legend('topright', legend='Time Series Plot of Humidity', col='blue', lwd=2)
+```
+
+**Finding the correlation**
+```{r}
+rbo_cor<-rcorr(as.matrix(rbo_dataframe))
+rbo_cor
+```
+**Checking the stationarity**
+```{r}
+#rbo series
+
+par(mfrow=c(1,2))
+acf(rbo_ts, main = "Sample ACF for the rbo series",cex.main=0.65)
+pacf(rbo_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.rbo_ts = ur.df(rbo_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.rbo_ts)
+adf.test(rbo_ts)
+#p> 0.05 hance this is not significant and we cannot reject null hypo i.e series is non-station
+
+#making the series stationary
+rbodiff = diff(rbo_ts)
+adf.test(rbodiff)
+rbodiff2 = diff(rbodiff)
+adf.test(rbodiff2)
+rbodiff3 = diff(rbodiff2)
+adf.test(rbodiff3) # Series has become stationary
+
+# temp series
+
+par(mfrow=c(1,2))
+acf(temp1_ts, main = "Sample ACF for the temp series",cex.main=0.65)
+pacf(temp1_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.temp1_ts = ur.df(temp1_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.temp1_ts)
+adf.test(temp1_ts)
+
+#making the series stationary
+tempdiff = diff(temp1_ts)
+adf.test(tempdiff)
+tempdiff2 = diff(tempdiff)
+adf.test(tempdiff2)
+tempdiff3 = diff(tempdiff2)
+adf.test(tempdiff3) # stationary
+
+# rain series
+
+par(mfrow=c(1,2))
+acf(rain1_ts, main = "Sample ACF for the rain series",cex.main=0.65)
+pacf(rain1_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.rain1_ts = ur.df(rain1_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.rain1_ts)
+adf.test(rain1_ts)
+
+#making the series stationary
+raindiff = diff(rain1_ts)
+adf.test(raindiff)
+
+# radiation series
+
+par(mfrow=c(1,2))
+acf(radi1_ts, main = "Sample ACF for the radiation series",cex.main=0.65)
+pacf(radi1_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.radi1_ts = ur.df(radi1_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.radi1_ts)
+adf.test(radi1_ts)
+
+#making the series stationary
+radidiff = diff(radi1_ts)
+adf.test(radidiff)
+radidiff2 = diff(radidiff)
+adf.test(radidiff2)
+radidiff3 = diff(radidiff2)
+adf.test(radidiff3)
+
+#humidity
+
+par(mfrow=c(1,2))
+acf(humi1_ts, main = "Sample ACF for the humidity series",cex.main=0.65)
+pacf(humi1_ts, main = "Sample PACF",cex.main=0.05)
+#In the pacf plot this can be seen that first lag is significant which gives the impression that 
+#the series is non stationary
+adf.humi1_ts = ur.df(humi1_ts, type = "none", lags = 1, selectlags = "AIC")
+summary(adf.humi1_ts)
+adf.test(humi1_ts)
+
+#making the series stationary
+humidiff = diff(humi1_ts)
+adf.test(humidiff)
+humidiff2 = diff(humidiff)
+adf.test(humidiff2)
+par(mfrow=c(1,1))
+plot(humidiff2,ylab='Temperature',xlab='Time period', col="red")
+```
+
+**DLM Model Fitting**
+
+```{r}
+for ( i in 1 : 10){
+  model1.1 = dlm ( x = as.vector (temp1_ts) , y = as.vector (rbo_ts), q = i)
+  cat ("q = " , i, "AIC = " , AIC (model1.1$model), "BIC = " , BIC (model1.1$model), "\n" )
+}
+
+# Temp vs RBO
+
+dlm.1 = dlm ( x = as.vector (temp1_ts) , y = as.vector (rbo_ts), q = 1)
+dlm.11 =summary(dlm.1)
+dlm.11$AIC
+dlm.11$BIC
+MASE(dlm.1)
+
+# Rainfall vs FFD
+
+dlm.2 = dlm ( x = as.vector (rain1_ts) , y = as.vector (rbo_ts), q = 1)
+dlm.21 =summary(dlm.2)
+dlm.21$AIC
+dlm.21$BIC
+MASE(dlm.2)
+
+# Radiation vs FFD
+
+dlm.3 = dlm ( x = as.vector (radi1_ts) , y = as.vector (rbo_ts), q = 1)
+dlm.31 =summary(dlm.3)
+dlm.31$AIC
+dlm.31$BIC
+MASE(dlm.3)
+
+# Humidity vs FFD
+
+dlm.4 = dlm ( x = as.vector (humi1_ts) , y = as.vector (rbo_ts), q = 1)
+dlm.41 =summary(dlm.4)
+dlm.41$AIC
+dlm.41$BIC
+MASE(dlm.4)
+
+## without intercept
+
+temp.nointercept = dlm(formula = RBO ~  Temperature- 1, data=data.frame(rbo_dataframe), q=1)
+rain.nointercept = dlm(formula = RBO ~  Rainfall- 1, data=data.frame(rbo_dataframe), q=1)
+radiation.nointercept = dlm(formula = RBO ~  Radiation- 1, data=data.frame(rbo_dataframe), q=1)
+Humidity.nointercept = dlm(formula = RBO ~  RelHumidity- 1, data=data.frame(rbo_dataframe), q=1)
+
+dlm.11$AIC
+dlm.21$AIC#Rainfall
+dlm.31$AIC 
+dlm.41$AIC
+AIC(temp.nointercept)
+AIC(rain.nointercept)
+AIC(radiation.nointercept)
+AIC(Humidity.nointercept)
+
+dlm.11$BIC
+dlm.21$BIC
+dlm.31$BIC
+dlm.41$BIC
+BIC(temp.nointercept)
+BIC(rain.nointercept)
+BIC(radiation.nointercept)
+BIC(Humidity.nointercept)
+
+
+MASE(dlm.1)
+MASE(dlm.2) #Selected rain
+MASE(dlm.3) 
+MASE(dlm.4)
+MASE(temp.nointercept)
+MASE(rain.nointercept)
+MASE(radiation.nointercept)
+MASE(Humidity.nointercept)
+
+#Selected dlm model
+dlm.2 = dlm ( x = as.vector (rain1_ts) , y = as.vector (rbo_ts), q = 10)
+summary(dlm.2)
+checkresiduals(dlm.2$model,test=FALSE)
+
+# Forecasting 
+
+# so we will be using radiation variable to forecast ffd
+rad <-covx$Radiation
+rad
+
+
+
+
+# Generating point forecasts
+
+forecastFFDfinite <- dLagM::forecast(dlm.2,x = c(14.6,
+                                                 14.56,
+                                                 14.79,
+                                                 14.79) ,h = 3)
+
+forecastFFDfinite <- round(forecastFFDfinite$forecasts,2)
+par(mfrow=c(1,1))
+plot(ts(c(as.vector(rbo_ts),forecastFFDfinite),start=1984),type="o",col="blue",ylim=c(0,1.5), ylab="FFD_forecasted",
+     main="Figure 39: FFD four year ahead predicted values from 2015-2017 ",)
+lines(ts(as.vector(rbo_ts),start=1984),col="black",type="o")
+legend("bottomleft", lty = 1,pch=1,text.width=11, col = c("blue","black"), c("Finite DLM","Data (FFD)"))
+```
+
+**Model Fitting Poly DLM**
+
+```{r}
+finiteDLMauto(x = as.vector(temp1_ts), y = as.vector(rbo_ts), q.min = 1, q.max = 10, k.order = 2,
+              model.type = "poly", error.type ="AIC", trace = TRUE)
+
+temp_poly = polyDlm(x = as.vector(temp1_ts), y = as.vector(rbo_ts), q = 2, k = 2,show.beta=TRUE)
+rain_poly = polyDlm(x = as.vector(rain1_ts), y = as.vector(rbo_ts), q = 2, k = 2,show.beta=TRUE)
+humid_poly = polyDlm(x = as.vector(humi1_ts), y = as.vector(rbo_ts), q = 2, k = 2,show.beta=TRUE)
+radiation_poly = polyDlm(x = as.vector(radi1_ts), y = as.vector(rbo_ts), q = 2, k = 2,show.beta=TRUE)
+
+AIC(temp_poly)
+AIC(rain_poly) #selected
+AIC(humid_poly)
+AIC(radiation_poly)
+
+BIC(temp_poly)
+BIC(rain_poly) #selected
+BIC(humid_poly) 
+BIC(radiation_poly)
+
+MASE(temp_poly)
+MASE(rain_poly)
+MASE(humid_poly)
+MASE(radiation_poly)
+
+summary (rain_poly)
+checkresiduals (rain_poly)
+
+
+poly_frc <- dLagM::forecast(rain_poly,x = c(2.27,
+                                            2.38,
+                                            2.26,
+                                            2.27
+) ,h = 3)
+poly_frc.1 <- round(poly_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(rbo_ts),poly_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(rbo_ts),poly_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2018)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(poly_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual RBO", "Forecasted RBO"))
+```
+
+**Model Fitting Koyck**
+
+```{r}
+temp_koyck = koyckDlm(x = as.vector(temp1_ts), y = as.vector(rbo_ts))
+rain_koyck = koyckDlm(x = as.vector(rain1_ts), y = as.vector(rbo_ts))
+humid_koyck = koyckDlm(x = as.vector(humi1_ts), y = as.vector(rbo_ts))
+radiation_koyck = koyckDlm(x = as.vector(radi1_ts), y = as.vector(rbo_ts))
+
+AIC(temp_koyck) 
+AIC(rain_koyck)
+AIC(humid_koyck) #selected
+AIC(radiation_koyck)
+
+BIC(temp_koyck)
+BIC(rain_koyck)
+BIC(humid_koyck)
+BIC(radiation_koyck)
+
+MASE(temp_koyck)
+MASE(rain_koyck)
+MASE(humid_koyck)
+MASE(radiation_koyck)
+
+summary (humid_koyck)
+checkresiduals (humid_koyck$model)
+
+#forecasting using koyck
+
+koyck_frc <- dLagM::forecast(humid_koyck,x = c(94.45,
+                                               94.03,
+                                               95.04,
+                                               95.06
+                                               
+) ,h = 3)
+koyck_frc.1 <- round(koyck_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(rbo_ts),koyck_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(rbo_ts),koyck_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2017)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(koyck_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual RBO", "Forecasted RBO"))
+```
+
+**Model Fitting ARDLM**
+
+```{r}
+for (i in 1:5){
+  for (j in 1: 5){
+    ard_model = ardlDlm (x=as.vector(temp1_ts) , y=as.vector(rbo_ts), p=i , q=j )
+    cat ( "p=" ,i, "q = ", j, "AIC =", AIC(ard_model$model), "BIC=", BIC(ard_model$model), "\n" )
+  }
+}
+
+temp_ardl = ardlDlm(x=as.vector(temp1_ts), y=as.vector(rbo_ts), p = 1, q = 3)
+rain_ardl = ardlDlm(x=as.vector(rain1_ts), y=as.vector(rbo_ts), p = 1, q = 3)
+humid_ardl = ardlDlm(x=as.vector(humi1_ts), y=as.vector(rbo_ts), p = 1, q = 3)
+radiation_ardl = ardlDlm(x=as.vector(radi1_ts), y=as.vector(rbo_ts), p = 1, q = 3)
+
+AIC(temp_ardl) 
+AIC(rain_ardl)
+AIC(humid_ardl)
+AIC(radiation_ardl) #selected
+
+BIC(temp_ardl)
+BIC(rain_ardl)
+BIC(humid_ardl)
+BIC(radiation_ardl)
+
+MASE(temp_ardl)
+MASE(rain_ardl)
+MASE(humid_ardl)
+MASE(radiation_ardl)
+
+summary (radiation_ardl)
+checkresiduals (radiation_ardl)
+
+
+#forecasting using ardlm
+
+ardl_frc <- dLagM::forecast(radiation_ardl,x = c(14.6,
+                                                 14.56,
+                                                 14.79,
+                                                 14.79
+                                                 
+) ,h = 3)
+ardl_frc.1 <- round(ardl_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(rbo_ts),ardl_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(rbo_ts),ardl_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2017)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(ardl_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual RBO", "Forecasted RBO"))
+```
+
+**Model Fitting DYNLM**
+
+```{r}
+dynlm.1 <- dynlm(rbo_ts ~ L(rbo_ts , k = 1 )+ trend(rbo_ts))
+dynlm.2 <- dynlm(rbo_ts ~ L(rbo_ts , k = 2 )+ trend(rbo_ts))
+dynlm.3 <-dynlm(rbo_ts~ L(rbo_ts , k = 1 )+ L(rbo_ts , k = 2 ))
+dynlm.4 <-dynlm(rbo_ts ~ temp1_ts + L(rbo_ts, k=1))
+dynlm.5 <-dynlm(rbo_ts ~ temp1_ts + L(rbo_ts, k=2))
+dynlm.6 <-dynlm(rbo_ts ~ rain1_ts + L(rbo_ts, k=1))
+dynlm.7 <-dynlm(rbo_ts ~ rain1_ts + L(rbo_ts, k=2))
+dynlm.8 <-dynlm(rbo_ts ~ radi1_ts + L(rbo_ts, k=1))
+dynlm.9 <-dynlm(rbo_ts ~ radi1_ts + L(rbo_ts, k=2))
+dynlm.10 <-dynlm(rbo_ts ~ humi1_ts + L(rbo_ts, k=1))
+dynlm.11 <-dynlm(rbo_ts ~ humi1_ts + L(rbo_ts, k=2))
+
+
+
+
+AIC(dynlm.1)
+AIC(dynlm.2)
+AIC(dynlm.3)
+AIC(dynlm.4)
+AIC(dynlm.5)
+AIC(dynlm.6)
+AIC(dynlm.7)
+AIC(dynlm.8) # selected particle size with lag 2
+AIC(dynlm.9)
+AIC(dynlm.10)
+AIC(dynlm.11)
+
+BIC(dynlm.1)
+BIC(dynlm.2)
+BIC(dynlm.3)
+BIC(dynlm.4)
+BIC(dynlm.5)
+BIC(dynlm.6)
+BIC(dynlm.7)
+BIC(dynlm.8)
+BIC(dynlm.9)
+BIC(dynlm.10)
+BIC(dynlm.11)
+
+summary(dynlm.1)
+checkresiduals(dynlm.1)
+
+
+##Best model
+ardl_frc <- dLagM::forecast(radiation_ardl,x = c(14.6,
+                                                 14.56,
+                                                 14.79,
+                                                 14.79
+                                                 
+) ,h = 3)
+ardl_frc.1 <- round(ardl_frc$forecasts,2)
+par(mfrow = c(1, 1))
+plot(ts(c(as.vector(rbo_ts),ardl_frc.1),start=1984), type = "o", col = "black", 
+     ylim = range(c(as.vector(rbo_ts),ardl_frc.1), na.rm = TRUE), ylab = "FFD Forecasted",
+     main = "FFD Forecast (2015-2017)", xlab = "Year")
+grid(lty = 3, col = "gray")
+points(ts(ardl_frc.1, start = 2015), pch = 20, col = "blue")
+legend("topright", lty = 1, pch = 20, text.width = 5, col = c("black", "blue"), 
+       c("Actual RBO", "Forecasted RBO"))
+```
+
+# Task-3.b
+
+```{r}
+DataSeries = rbo_ts
+Threshold = 13
+EffectIndicator = ifelse(DataSeries >= Threshold, 1, 0)
+LaggedEffectIndicator = stats::lag(EffectIndicator, k = 1)
+
+model1 =dynlm(DataSeries~ L(DataSeries , k = 1 )+EffectIndicator+ trend(DataSeries))
+model2 =dynlm(DataSeries~ L(DataSeries , k = 2 )+EffectIndicator+ trend(DataSeries))
+model3 =dynlm(DataSeries~ L(DataSeries , k = 1 )+EffectIndicator)
+model4 =dynlm(DataSeries~ L(DataSeries , k = 1 )+EffectIndicator+trend(DataSeries))
+model5 =dynlm(DataSeries~ L(DataSeries , k = 1 )+ L(DataSeries , k = 2 )+EffectIndicator+LaggedEffectIndicator)
+model6 =dynlm(DataSeries~ L(DataSeries , k = 1 )+ L(DataSeries , k = 2 )+LaggedEffectIndicator)
+model7 = dynlm(DataSeries~ L(DataSeries , k = 1 )+ L(DataSeries , k = 2 )+ L(DataSeries , k = 3 )+LaggedEffectIndicator)
+model8 = dynlm(DataSeries~ L(DataSeries , k = 1 )+ L(DataSeries , k = 2 )+L(DataSeries , k = 3 )+EffectIndicator+LaggedEffectIndicator+ trend(DataSeries))
+model9 = dynlm(DataSeries~rain1_ts + L(DataSeries , k = 1 ) + L(DataSeries , k = 2 )+ EffectIndicator+ + LaggedEffectIndicator + trend(DataSeries))
+model10 = dynlm(DataSeries~temp1_ts + L(DataSeries , k = 1 ) + L(DataSeries , k = 2 )+ EffectIndicator+ + LaggedEffectIndicator + trend(DataSeries))
+model11 = dynlm(DataSeries~radi1_ts + L(DataSeries , k = 1 ) + L(DataSeries , k = 2 )+ EffectIndicator+ + LaggedEffectIndicator + trend(DataSeries))
+model12 = dynlm(DataSeries~humi1_ts + L(DataSeries , k = 1 ) + L(DataSeries , k = 2 )+ EffectIndicator+ + LaggedEffectIndicator + trend(DataSeries))
+
+AIC(model1) #select
+AIC(model2)
+AIC(model3)
+AIC(model4)
+AIC(model5)
+AIC(model6)
+AIC(model7)
+AIC(model8)
+AIC(model9)
+AIC(model10)
+AIC(model11)
+AIC(model12)
+
+
+
+
+BIC(model1)
+BIC(model2)
+BIC(model3)
+BIC(model4)
+BIC(model5)
+BIC(model6)
+BIC(model7)
+BIC(model8)
+BIC(model9)
+BIC(model10)
+BIC(model11)
+BIC(model12)
+
+MASE(lm(model1))
+MASE(lm(model2))
+MASE(lm(model3))
+MASE(lm(model4))
+MASE(lm(model5))
+MASE(lm(model6))
+MASE(lm(model7))
+MASE(lm(model8))
+MASE(lm(model9))
+MASE(lm(model10))
+MASE(lm(model11))
+MASE(lm(model12))
+
+
+
+summary(model1)
+
+
+par(mfrow=c(1,1))
+plot(DataSeries,ylab='RBO',xlab='Year',main = "Time series plot of the  yearly RBO with fitted model9")
+lines(model1$fitted.values,col="green")
+```
